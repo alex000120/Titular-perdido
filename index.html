@@ -1875,7 +1875,18 @@ if(TV){
   function ld(k,d){ try{ return JSON.parse(localStorage.getItem(k))||d; }catch(e){ return d; } }
   function sv(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
   function stop(){ try{ if(ss) ss.cancel(); }catch(e){} Array.prototype.forEach.call(rd.querySelectorAll('[data-oy].on'),function(b){ b.classList.remove('on'); b.textContent='🔊 Escuchar la nota'; }); }
-  var RE=[['😠','Bronca'],['😢','Tristeza'],['🤔','Duda'],['🙏','Esperanza'],['💪','Orgullo']];
+  var RE=[['😠','Bronca'],['😢','Tristeza'],['🤔','Duda'],['🙏','Esperanza'],['💪','Orgullo']], RK=['bronca','tristeza','duda','esperanza','orgullo'];
+  /* las opiniones llegan a la base de datos del proyecto (la misma del contador); se leen en panel.html */
+  var DB='https://titular-perdido-default-rtdb.firebaseio.com';
+  function dbq(p,m,b){ return fetch(DB+p+'.json',{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){ if(!r.ok) throw 0; return r.json(); }); }
+  function cron(){ try{ return (localStorage.getItem('nd_cron')||'').trim().slice(0,28); }catch(e){ return ''; } }
+  function sendRe(k,emo,zm){
+    var key=RK[RE.map(function(r){ return r[0]; }).indexOf(emo)], old=ld('nd_rk'+k,''); if(!key||key===old) return;
+    zm.textContent='Enviando tu reacción…';
+    dbq('/reacciones/n'+k+'/'+key,'PUT',{'.sv':{increment:1}})
+      .then(function(){ sv('nd_rk'+k,key); return old?dbq('/reacciones/n'+k+'/'+old,'PUT',{'.sv':{increment:-1}}):0; })
+      .then(function(){ zm.textContent='🦉 ¡Gracias! Tu reacción llegó a la redacción.'; })
+      .catch(function(){ zm.textContent='🦉 Tu reacción quedó guardada en tu celular (no pudimos enviarla ahora).'; }); }
   function build(a){
     stop();
     var m=(a.querySelector('.r-mast span')||{}).textContent||'', k=(m.match(/Nota (\d+)/)||[0,0])[1];
@@ -1884,7 +1895,7 @@ if(TV){
     z.innerHTML='<small>✨ ZONA DEL LECTOR</small>'+(ss?'<button class="zb" data-oy>🔊 Escuchar la nota</button>':'')
       +'<p class="zh">🖍️ Tocá cualquier párrafo para subrayarlo. <b class="zc"></b></p>'
       +'<div class="zr"><span>¿Qué te provocó esta nota?</span><div>'+RE.map(function(r){ return '<button data-re="'+r[0]+'"><b>'+r[0]+'</b>'+r[1]+'</button>'; }).join('')+'</div></div>'
-      +'<textarea maxlength="400" placeholder="✍️ Carta de lector: ¿qué le dirías a la redacción?"></textarea><button class="zb" data-env>📤 Enviar mi carta</button><div class="zm"></div>';
+      +'<textarea maxlength="400" placeholder="✍️ Carta de lector: ¿qué le dirías a la redacción?"></textarea><button class="zb" data-env>📨 Enviar a la redacción</button> <button class="zb" data-comp>📤 Compartir</button><p class="zh" style="margin:0 0 8px">🔒 Tu carta llega a la redacción del CEJA, con tu nombre de cronista si lo escribiste. No pongas datos privados.</p><div class="zm"></div>';
     var t=a.querySelector(':scope>.vec')||a.querySelector(':scope>.reto')||a.querySelector(':scope>.r-more');
     if(t) a.insertBefore(z,t); else a.appendChild(z);
     var zc=z.querySelector('.zc'), zm=z.querySelector('.zm'), ta=z.querySelector('textarea');
@@ -1897,7 +1908,7 @@ if(TV){
     var mine=ld('nd_re'+k,''); Array.prototype.forEach.call(z.querySelectorAll('[data-re]'),function(b){
       if(b.getAttribute('data-re')===mine) b.classList.add('on');
       b.addEventListener('click',function(){ Array.prototype.forEach.call(z.querySelectorAll('[data-re]'),function(x){ x.classList.remove('on'); });
-        b.classList.add('on'); sv('nd_re'+k,b.getAttribute('data-re')); zm.textContent='🦉 Anotamos tu reacción. Quedó guardada en tu celular.'; }); });
+        b.classList.add('on'); sv('nd_re'+k,b.getAttribute('data-re')); sendRe(k,b.getAttribute('data-re'),zm); }); });
     ta.addEventListener('keydown',function(e){ e.stopPropagation(); });
     var ob=z.querySelector('[data-oy]');
     if(ob) ob.addEventListener('click',function(){
@@ -1907,6 +1918,13 @@ if(TV){
       u.onend=u.onerror=function(){ ob.classList.remove('on'); ob.textContent='🔊 Escuchar la nota'; };
       ss.cancel(); ss.speak(u); ob.classList.add('on'); ob.textContent='⏹ Detener lectura'; });
     z.querySelector('[data-env]').addEventListener('click',function(){
+      var bt=this, v=ta.value.trim(); if(!v){ zm.textContent='✍️ Escribí unas líneas primero, ¡aunque sean pocas!'; return; }
+      bt.disabled=true; zm.textContent='Enviando tu carta…';
+      dbq('/cartas','POST',{n:+k,titulo:title,texto:v.slice(0,400),cronista:cron(),t:{'.sv':'timestamp'}})
+        .then(function(){ zm.textContent='🦉 ¡Carta enviada a la redacción! Gracias por opinar.'; ta.value=''; setTimeout(function(){ bt.disabled=false; },15000); })
+        .catch(function(){ zm.textContent='No pudimos enviarla ahora (¿sin internet?). Probá de nuevo o usá Compartir.'; bt.disabled=false; });
+    });
+    z.querySelector('[data-comp]').addEventListener('click',function(){
       var v=ta.value.trim(); if(!v){ zm.textContent='✍️ Escribí unas líneas primero, ¡aunque sean pocas!'; return; }
       var tx='CARTA DE LECTORES · Noticias del Día\nSobre: «'+title+'»\n\n'+v+'\n\n— Un lector de Los Ralos';
       if(navigator.share){ navigator.share({title:'Carta de lectores',text:tx}).catch(function(){}); }

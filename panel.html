@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Panel de la redacción · El Titular Perdido</title>
+<style>
+:root{--bg:#f3eee2;--card:#fff;--ink:#10201a;--mut:#5b6b64;--line:#d8d0bb;--g:#1f5a43;--gold:#d8b45a}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1511;--card:#13221b;--ink:#eef3ee;--mut:#9fb2a8;--line:#27402f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:calc(14px + env(safe-area-inset-top)) 14px calc(30px + env(safe-area-inset-bottom))}
+main{max-width:760px;margin:0 auto}
+h1{font:900 26px/1.1 Georgia,serif;margin:0}
+.sub{color:var(--mut);font-size:14px;margin:4px 0 16px}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+button,select{font:inherit;color:inherit}
+.btn{background:var(--g);color:#fff;border:0;border-radius:999px;padding:9px 16px;font-weight:800;font-size:14px;cursor:pointer}
+.btn.sec{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;text-align:center}
+.stat b{display:block;font:900 28px/1.1 Georgia,serif}.stat span{font-size:12px;color:var(--mut)}
+h2{font:800 13px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin:26px 0 10px}
+.nota{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--c);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.nota h3{font:800 16px/1.3 Georgia,serif;margin:0 0 4px}
+.top1{font-size:13px;color:var(--mut);margin-bottom:8px}
+.row{display:grid;grid-template-columns:92px 1fr 34px;align-items:center;gap:8px;font-size:14px;margin:4px 0}
+.bar{height:12px;background:rgba(127,127,127,.18);border-radius:6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--c);border-radius:6px;transition:width .5s}
+.row em{font-style:normal;font-weight:800;text-align:right}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+select{background:var(--card);border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;max-width:100%}
+.carta{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.carta small{display:block;color:var(--mut);font-size:12px;margin-bottom:6px}
+.carta p{margin:0;font:italic 500 17px/1.5 Georgia,serif;white-space:pre-wrap;overflow-wrap:anywhere}
+.carta footer{margin-top:8px;font-size:13px;color:var(--mut)}
+.vacio{color:var(--mut);text-align:center;padding:18px}
+#err{display:none;background:#fff3cd;color:#4a3b00;border:1px solid #e6c85a;border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:14px}
+#err pre{background:rgba(0,0,0,.07);padding:10px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.35;margin:8px 0 0}
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><div><h1>📰 Panel de la redacción</h1><div class="sub">Qué opinan los lectores · <span id="hora">cargando…</span></div></div><button class="btn" id="act">↻ Actualizar</button></div>
+  <div id="err"></div>
+  <div class="stats"><div class="stat"><b id="sv">–</b><span>visitas</span></div><div class="stat"><b id="sr">–</b><span>reacciones</span></div><div class="stat"><b id="sc">–</b><span>cartas</span></div></div>
+  <h2>Reacciones por nota</h2><div id="notas"></div>
+  <h2>Cartas de lectores</h2>
+  <div class="tools"><select id="fil" aria-label="Filtrar por nota"></select><button class="btn sec" id="csv">⬇️ Descargar CSV</button><button class="btn sec" id="cop">📋 Copiar todo</button></div>
+  <div id="cartas"></div>
+</main>
+<script>
+var DB='https://titular-perdido-default-rtdb.firebaseio.com';
+var NOTAS=[{"t": "Creciente tensión en Los Ralos", "c": "#1f5a43"}, {"t": "Vecinos de Los Ralos reclaman controles urgentes por las picadas de motos en la Ruta 303", "c": "#a1342c"}, {"t": "Pánico y destrucción en Los Ralos", "c": "#b4531a"}, {"t": "Un colectivo se incendió por completo en Los Ralos", "c": "#7b4a2a"}, {"t": "El oro dulce vuelve a Los Ralos", "c": "#9a6f0b"}, {"t": "El misterio de la Caja de Pandora cobra vida: estudiantes preparan una obra teatral sobre el clásico mito en la localidad", "c": "#6b3fa0"}, {"t": "El adoquinado de las calles busca mejorar la vida de los vecinos del barrio Cerco", "c": "#2c5f8a"}];
+var RE=[['bronca','😠','Bronca'],['tristeza','😢','Tristeza'],['duda','🤔','Duda'],['esperanza','🙏','Esperanza'],['orgullo','💪','Orgullo']];
+var RULES='{\n  "rules": {\n    "visitas": { ".read": true, ".write": true },\n    "reacciones": { ".read": true, "$n": { "$r": { ".write": true, ".validate": "newData.isNumber()" } } },\n    "cartas": { ".read": true, "$id": { ".write": "!data.exists()",\n      ".validate": "newData.hasChildren([\'n\',\'texto\']) && newData.child(\'texto\').isString() && newData.child(\'texto\').val().length <= 400" } }\n  }\n}';
+var $=function(q){ return document.querySelector(q); }, cartas=[];
+function esc(t){ return String(t==null?'':t).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function get(p){ return fetch(DB+p+'.json').then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }); }
+function nom(n){ return NOTAS[n-1]?NOTAS[n-1].t:'Nota '+n; }
+function fecha(t){ return t?new Date(t).toLocaleString('es-AR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''; }
+function load(){
+  $('#act').disabled=true;
+  Promise.allSettled([get('/visitas'),get('/reacciones'),get('/cartas')]).then(function(r){
+    var bad=r.slice(1).some(function(x){ return x.status==='rejected'; });
+    var e=$('#err'); e.style.display=bad?'block':'none';
+    if(bad) e.innerHTML='⚠️ Firebase no deja leer las opiniones todavía. En <b>Firebase → Realtime Database → Reglas</b> pegá esto y tocá «Publicar»:<pre>'+esc(RULES)+'</pre>';
+    $('#sv').textContent=r[0].status==='fulfilled'&&r[0].value!=null?r[0].value:'–';
+    var re=(r[1].status==='fulfilled'&&r[1].value)||{}, tot=0, h='';
+    NOTAS.forEach(function(n,i){
+      var d=re['n'+(i+1)]||{}, sum=0, max=0, top=null;
+      RE.forEach(function(x){ var v=Math.max(0,+d[x[0]]||0); sum+=v; if(v>max){ max=v; top=x; } });
+      tot+=sum;
+      h+='<div class="nota" style="--c:'+n.c+'"><h3>'+(i+1)+'. '+esc(n.t)+'</h3><div class="top1">'+(sum?'Lo que más sintieron: '+top[1]+' '+top[2]+' ('+Math.round(max*100/sum)+'%) · '+sum+(sum===1?' reacción':' reacciones'):'Todavía sin reacciones')+'</div>';
+      RE.forEach(function(x){ var v=Math.max(0,+d[x[0]]||0); h+='<div class="row"><span>'+x[1]+' '+x[2]+'</span><div class="bar"><i style="width:'+(sum?v*100/sum:0)+'%"></i></div><em>'+v+'</em></div>'; });
+      h+='</div>';
+    });
+    $('#notas').innerHTML=h; $('#sr').textContent=tot;
+    var c=(r[2].status==='fulfilled'&&r[2].value)||{};
+    cartas=Object.keys(c).map(function(k){ return c[k]; }).filter(function(x){ return x&&x.texto; }).sort(function(a,b){ return (b.t||0)-(a.t||0); });
+    $('#sc').textContent=cartas.length;
+    var f=$('#fil'), cur=f.value; f.innerHTML='<option value="">Todas las notas</option>'+NOTAS.map(function(n,i){ return '<option value="'+(i+1)+'">'+(i+1)+'. '+esc(n.t.slice(0,48))+'</option>'; }).join(''); f.value=cur;
+    pintar(); $('#hora').textContent='actualizado '+new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}); $('#act').disabled=false;
+  });
+}
+function lista(){ var f=$('#fil').value; return cartas.filter(function(x){ return !f||String(x.n)===f; }); }
+function pintar(){
+  var l=lista();
+  $('#cartas').innerHTML=l.length?l.map(function(x){ return '<div class="carta"><small>'+esc(nom(x.n))+' · '+esc(fecha(x.t))+'</small><p>'+esc(x.texto)+'</p><footer>— '+(x.cronista?esc(x.cronista):'Un lector')+'</footer></div>'; }).join(''):'<div class="vacio">Todavía no hay cartas.</div>';
+}
+function csvq(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; }
+$('#fil').onchange=pintar; $('#act').onclick=load;
+$('#csv').onclick=function(){ var l=lista(); if(!l.length) return;
+  var t='fecha,nota,titulo,cronista,carta\n'+l.map(function(x){ return [x.t?new Date(x.t).toISOString():'',x.n,nom(x.n),x.cronista||'',x.texto].map(csvq).join(','); }).join('\n');
+  var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['\ufeff'+t],{type:'text/csv;charset=utf-8'})); a.download='cartas-titular-perdido.csv'; document.body.appendChild(a); a.click(); a.remove(); };
+$('#cop').onclick=function(){ var l=lista(); if(!l.length) return;
+  var t=l.map(function(x){ return nom(x.n)+' · '+fecha(x.t)+'\n“'+x.texto+'”\n— '+(x.cronista||'Un lector'); }).join('\n\n');
+  if(navigator.clipboard) navigator.clipboard.writeText(t).then(function(){ $('#cop').textContent='✅ Copiado'; setTimeout(function(){ $('#cop').textContent='📋 Copiar todo'; },1800); }); };
+load(); setInterval(load,30000);
+</script>
+</body>
+</html>
